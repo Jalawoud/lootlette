@@ -26,6 +26,41 @@ public interface LouletteConfig extends Config
 	)
 	String rarityColours = "rarityColours";
 
+	@ConfigSection(
+		name = "Which monsters spin",
+		description = "Choose meaningful drop sources and your own exceptions",
+		position = 10
+	)
+	String sources = "sources";
+
+	@ConfigItem(
+		keyName = "spinSources", name = "Spin for",
+		description = "Bosses and unique-dropping monsters checks potential collection-log drops and tagged uniques. Ordinary loot can still land on eligible kills.",
+		section = sources, position = 0
+	)
+	default SpinSources spinSources() { return SpinSources.MEANINGFUL_UNIQUES; }
+
+	@ConfigItem(
+		keyName = "includeSharedDrops", name = "Include shared drops",
+		description = "Let clue scrolls, shared rare-drop-table items and similar shared drops qualify a monster. Off keeps ordinary monsters from qualifying just for those drops.",
+		section = sources, position = 1
+	)
+	default boolean includeSharedDrops() { return false; }
+
+	@ConfigItem(
+		keyName = "alwaysIncludeNpcs", name = "Always include NPCs",
+		description = "Comma-separated NPC names; * matches any characters. Also used by 'Only my include list'. The ignore list always wins.",
+		section = sources, position = 2
+	)
+	default String alwaysIncludeNpcs() { return ""; }
+
+	@ConfigItem(
+		keyName = "raidRewardSpins", name = "Raid reward spins",
+		description = "Spin for CoX, ToB and ToA rewards independently of the monster filter. Raid room enemies remain suppressed. Doom of Mokhaiotl follows the monster filter.",
+		section = sources, position = 3
+	)
+	default boolean raidRewardSpins() { return true; }
+
 	// ---- Top level (common) ----
 
 	@ConfigItem(

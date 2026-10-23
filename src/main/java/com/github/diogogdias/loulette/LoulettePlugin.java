@@ -71,6 +71,12 @@ public class LoulettePlugin extends Plugin
 	static final String CONFIG_GROUP = "loulette";
 	static final int NOTHING_ID = -999;
 
+	@Inject
+	private NpcSpinFilter npcSpinFilter;
+
+	@Inject
+	private CollectionLogCatalog collectionLogCatalog;
+
 	// Bosses whose HP bar empties at every phase transition, not just on death. The HP-zero pre-spin would
 	// otherwise free-spin a reel mid-fight; these still roll on the actual kill via the loot event.
 	private static final Set<String> MULTI_PHASE_BOSSES = new HashSet<>(Arrays.asList(
@@ -253,6 +259,7 @@ public class LoulettePlugin extends Plugin
 		overlayManager.add(chestOverlay);
 		overlayManager.add(reelOverlay);
 		loadIgnoredNpcs();
+		npcSpinFilter.clear();
 		log.debug("Lootlette started");
 	}
 
@@ -289,9 +296,11 @@ public class LoulettePlugin extends Plugin
 		{
 			tableCache.clear();
 		}
-		if (CONFIG_GROUP.equals(event.getGroup()) && "ignoredNpcs".equals(event.getKey()))
+		if (CONFIG_GROUP.equals(event.getGroup()) && Arrays.asList("spinSources", "includeSharedDrops", "alwaysIncludeNpcs", "raidRewardSpins", "ignoredNpcs", "wikiDropTables").contains(event.getKey()))
 		{
-			loadIgnoredNpcs();
+			npcSpinFilter.clear();
+			if ("ignoredNpcs".equals(event.getKey())) loadIgnoredNpcs();
+			activeRolls.removeIf(roll -> !allowedSource(roll.getMonster()));
 		}
 	}
 
@@ -332,6 +341,7 @@ public class LoulettePlugin extends Plugin
 	@Subscribe
 	public void onGameTick(GameTick tick)
 	{
+		if (client.getGameState() == GameState.LOGGED_IN) collectionLogCatalog.load();
 		final long now = System.currentTimeMillis();
 
 		// Track who we're fighting so we only roll for our own kills.
@@ -522,6 +532,7 @@ public class LoulettePlugin extends Plugin
 			log.debug("skip spin '{}' (raid boss; loot comes from the chest)", monster);
 			return;
 		}
+		if (!npcSpinFilter.allows(monster)) return;
 		// Multi-phase bosses only reach here on the real death (isDying gates them to isDead), so no special-case
 		// is needed — fall through and pre-spin like any other kill.
 		if (!hasDropTable(monster))
@@ -617,7 +628,7 @@ public class LoulettePlugin extends Plugin
 	public void onNpcLootReceived(NpcLootReceived event)
 	{
 		final NPC npc = event.getNpc();
-		if (npc == null || npc.getName() == null || isRaidChestBoss(npc.getName()) || isIgnored(npc.getName()))
+		if (npc == null || npc.getName() == null || isRaidChestBoss(npc.getName()) || isIgnored(npc.getName()) || !npcSpinFilter.allows(npc.getName()))
 		{
 			return;
 		}
@@ -651,7 +662,7 @@ public class LoulettePlugin extends Plugin
 		final Collection<ItemStack> items = event.getItems();
 		log.debug("onServerNpcLoot '{}' id={} items={}", name, comp.getId(), items == null ? -1 : items.size());
 		if (name.isEmpty() || "null".equals(name) || items == null || items.isEmpty()
-			|| isRaidChestBoss(name) || isIgnored(name))
+			|| isRaidChestBoss(name) || isIgnored(name) || !npcSpinFilter.allows(name))
 		{
 			return;
 		}
@@ -932,7 +943,7 @@ public class LoulettePlugin extends Plugin
 			return;
 		}
 		final RaidChest raid = raidByEventName(event.getName());
-		if (raid == null)
+		if (raid == null || !shouldSpinChest(raid))
 		{
 			return;
 		}
@@ -1060,6 +1071,7 @@ public class LoulettePlugin extends Plugin
 		{
 			return;
 		}
+		if (!shouldSpinChest(raid)) return;
 		final List<DropEntry> entries = dropTableService.table(raid.page).getNow(Collections.emptyList());
 		final ResolvedTable table = entries.isEmpty() ? tableCache.get(raid.page.toLowerCase()) : resolveTable(raid.page, entries);
 		final Set<Integer> uniqueIds = resolveUniqueIds(raid);
@@ -1098,6 +1110,7 @@ public class LoulettePlugin extends Plugin
 	private void startChestAnticipation(RaidChest raid, WorldPoint loc, boolean forceHorizontal, boolean persistent,
 		boolean fullPool)
 	{
+		if (!shouldSpinChest(raid)) return;
 		final List<DropEntry> entries = dropTableService.table(raid.page).getNow(Collections.emptyList());
 		final ResolvedTable table = entries.isEmpty() ? tableCache.get(raid.page.toLowerCase()) : resolveTable(raid.page, entries);
 
@@ -1126,6 +1139,7 @@ public class LoulettePlugin extends Plugin
 	/** Lands a chest reel: purples roll only the unique pool, whites roll only the supply pool. */
 	private void finaliseChestRoll(RaidChest raid, ActiveRoll roll, List<ItemStack> items, boolean purple)
 	{
+		if (!shouldSpinChest(raid)) return;
 		final List<DropEntry> entries = dropTableService.table(raid.page).getNow(Collections.emptyList());
 		final ResolvedTable table = entries.isEmpty() ? tableCache.get(raid.page.toLowerCase()) : resolveTable(raid.page, entries);
 		if (table != null)
@@ -1235,6 +1249,20 @@ public class LoulettePlugin extends Plugin
 		return false;
 	}
 
+	private boolean shouldSpinChest(RaidChest raid)
+	{
+		if ("Doom of Mokhaiotl".equals(raid.eventPrefix))
+			return !isIgnored(raid.page) && npcSpinFilter.allows(raid.page);
+		return config.raidRewardSpins();
+	}
+
+	private boolean allowedSource(String source)
+	{
+		for (RaidChest raid : RAID_CHESTS)
+			if (raid.page.equalsIgnoreCase(source)) return shouldSpinChest(raid);
+		return !isIgnored(source) && npcSpinFilter.allows(source);
+	}
+
 	/** True for raid room bosses whose loot is delivered by the raid chest, so they must not roll themselves. */
 	private static boolean isRaidChestBoss(String name)
 	{
@@ -1303,6 +1331,7 @@ public class LoulettePlugin extends Plugin
 	/** Records the drop and spins a roll for a loot source (NPC kill or raids chest), reusing any in-flight roll. */
 	private void rollFor(int index, WorldPoint location, String source, List<ItemStack> items, boolean forceHorizontal)
 	{
+		if (isIgnored(source) || !npcSpinFilter.allows(source)) return;
 		final Set<Integer> seen = seenDrops.computeIfAbsent(source.toLowerCase(), k -> ConcurrentHashMap.newKeySet());
 		for (ItemStack s : items)
 		{
@@ -1340,6 +1369,7 @@ public class LoulettePlugin extends Plugin
 
 	private void finaliseRoll(ActiveRoll roll, List<ItemStack> items, List<DropEntry> entries)
 	{
+		if (isIgnored(roll.getMonster()) || !npcSpinFilter.allows(roll.getMonster())) return;
 		final ResolvedTable table = !entries.isEmpty()
 			? resolveTable(roll.getMonster(), entries)
 			: tableCache.get(roll.getMonster().toLowerCase());
