@@ -25,6 +25,33 @@ nothing notable dropped, each cell tinted by the item's drop rarity.
 - Each cell is tinted by the item's **drop rarity** (see below); the reel pool of "possible items" is the
   monster's full drop table.
 
+## Which monsters spin
+
+The default **Spin for** setting is **Bosses and unique-dropping monsters**. This filters the source,
+not the item you received: an eligible boss still spins on an ordinary drop or a miss. Ordinary Karamja
+monkeys, chickens and cows do not qualify just because they have a drop table.
+
+Eligibility combines the game's collection-log item definitions with the bundled wiki unique/pet tags.
+The definitions are read from the game cache; you do not need to open or sync your collection log,
+and this does not depend on which items you personally have obtained. The log supplies item IDs,
+which are matched against each monster's own drop table. Bulk tracked resources, shared rare-drop-table
+rows and clue-scroll access do not qualify an ordinary source by default.
+
+- **All monsters** restores the broad source behavior.
+- **Only my include list** spins only for the comma-separated names in **Always include NPCs**.
+- **Always include NPCs** also adds exceptions to the default mode. Names ignore case; `*` is a wildcard
+  (for example, `Revenant*`).
+- **Include shared drops** lets clues and shared rare-drop-table items qualify ordinary monsters.
+- **Right-click ignore** continues to exclude NPCs in every mode, even when explicitly included.
+- **Raid reward spins** independently controls supported CoX, ToB and ToA reward spins, including
+  anticipation. Raid room NPCs remain suppressed. Doom of Mokhaiotl is a boss reward source and follows
+  the monster filter rather than this raid toggle.
+
+Changing these settings also removes already-running reels that are no longer eligible. New or
+unrecognised content still depends on having a usable drop table; add an include exception or enable
+the existing live wiki fallback when necessary. This is a meaningful-source filter, not an exact list
+of NPCs with their own named collection-log page and not a filter for only missing log slots.
+
 ## Display
 
 - **Vertical reels** (default) render in a cluster over the tile where the loot came from.
@@ -54,31 +81,18 @@ counts, always-drop filtering, rarity colours or Nothing results).
 
 | Setting | Default | Notes |
 |---|---|---|
+| Spin for | Bosses and unique-dropping monsters | Filter sources by potential meaningful uniques; does not require a unique on the current kill. |
+| Include shared drops | off | Let clues and shared rare-drop-table items qualify ordinary sources. |
+| Always include NPCs | empty | Comma-separated names; `*` wildcard. Ignore takes precedence. |
+| Raid reward spins | on | Independently control supported CoX, ToB and ToA chest rewards. |
 | Settle time (ms) | 800 | How quickly the reels settle on the result once the loot resolves. |
 | Spin speed | 14 | How fast the reels spin while free-spinning (items per second). |
 | Result hold time (ms) | 2500 | How long the landed result stays on screen before it fades. |
 | Slot size (%) | 100 | Scales the reel slots and the item icons (50–250%). |
 | Horizontal reel (top centre) | off | Single CS:GO-style strip at the top centre instead of reels over the tile. |
-| Bosses only | off | Only spin for bosses, whitelisted NPCs and the raid/boss reward chests already supported by Lootlette. Skips other ordinary monsters, boss minions and Sailing harvests; ignored NPCs stay ignored. Enabling it also removes reels that no longer qualify. |
-| NPC whitelist | empty | Comma-separated exact NPC names to include alongside bosses in boss-only mode. Case and surrounding spaces are ignored. The ignore list takes precedence. |
 | Min item value (gp) | 0 | Drops below this value roll to 'Nothing'. 0 = count everything. |
 | Hide rare drop table | on | Leaves the shared rare/gem/mega drop table (uncut gems, half keys, deep rune/dragon drops) out of the reel so a monster's own drops and uniques stand out. Items you actually receive still land. |
 | Live wiki fallback | off | Fetch tables live from the wiki for monsters missing from the bundled snapshot. Off by default because it sends your IP to a third-party server. |
-
-Boss detection uses RuneLite's hiscore boss names, with NPC-name mappings for Grotesque Guardians,
-Royal Titans, the Gauntlet, Vet'ion's second form and Great Olm. The toggle filters existing loot
-sources; it does not add support for new reward-chest types. NPCs absent from the boss list can be
-included explicitly through the whitelist.
-
-For example, to include Bandos's three minions with **Bosses only** enabled, set **NPC whitelist** to:
-
-```text
-Sergeant Strongstack, Sergeant Steelwill, Sergeant Grimspike
-```
-
-This adds exceptions rather than limiting the plugin to those names: all recognised bosses still roll.
-With **Bosses only** off, ordinary NPCs still roll as usual. Editing the whitelist applies immediately
-to existing reels and pending table lookups; ignored NPCs never bypass the ignore list through the whitelist.
 
 ### Rarity colours
 
